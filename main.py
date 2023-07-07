@@ -59,3 +59,11 @@ while True:
         break
 
 print(total_seconds)
+
+total_seconds = int(total_seconds)
+
+
+minutes, seconds = divmod(total_seconds, 60)
+hours, minutes = divmod(minutes, 60)
+
+print(f'{hours}:{minutes}:{seconds}')
