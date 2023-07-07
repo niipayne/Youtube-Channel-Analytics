@@ -8,6 +8,8 @@ hours_pattern = re.compile(r'(\d+)H')
 minutes_pattern = re.compile(r'(\d+)M')
 seconds_pattern = re.compile(r'(\d+)S')
 
+total_seconds = 0
+
 nextPageToken = None
 while True:
     pl_request = youtube.playlistItems().list(
@@ -49,9 +51,11 @@ while True:
             seconds = seconds
         ).total_seconds()
 
-        print(video_seconds)
-        print()
+        total_seconds += video_seconds
+
     nextPageToken = pl_response.get('nextPageToken')
 
     if not nextPageToken:
         break
+
+print(total_seconds)
