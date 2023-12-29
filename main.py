@@ -1,69 +1,81 @@
-import re
-from datetime import timedelta
 from googleapiclient.discovery import build
+import json
+import pandas as pd
+import visualizer
 
-youtube = build('youtube', 'v3', developerKey='AIzaSyAyh0L1ib80S1ezQs-onDhAsvH1ZDDUjoI')
+api_key = 'AIzaSyAyh0L1ib80S1ezQs-onDhAsvH1ZDDUjoI'
 
-hours_pattern = re.compile(r'(\d+)H')
-minutes_pattern = re.compile(r'(\d+)M')
-seconds_pattern = re.compile(r'(\d+)S')
+# Getting the channel upload Id
+def get_channel_details(channel_id):
+    youtube = build('youtube', 'v3', developerKey='AIzaSyAyh0L1ib80S1ezQs-onDhAsvH1ZDDUjoI')
+    request = youtube.channels().list(
+        part = 'contentDetails, snippet, statistics',
+        id = channel_id)
+    response = request.execute()
 
-total_seconds = 0
-
-nextPageToken = None
-while True:
-    pl_request = youtube.playlistItems().list(
-        part = 'contentDetails',
-        playlistId = 'PL-osiE80TeTsWmV9i9c58mdDCSskIFdDS',
-        maxResults = 50,
-        pageToken = nextPageToken
-    )
-
-    pl_response = pl_request.execute()
-
-    vid_ids = []
-    for item in pl_response['items']:
-        vid_ids.append(item['contentDetails']['videoId'])
-
-    vid_request = youtube.videos().list(
-        part = "contentDetails",
-        id = ','.join(vid_ids)  
-    )
-
-    vid_response = vid_request.execute()
-
+    uploads_playlist_id = response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
     
 
-    for item in vid_response['items']:
-        duration = item['contentDetails']['duration']
+# Get the 50 most recent videos in the uploads playlist
 
-        hours = hours_pattern.search(duration)
-        minutes = minutes_pattern.search(duration)
-        seconds = seconds_pattern.search(duration)
+    playlist_items = []
+    page_token = None
+    while len(playlist_items)  < 50:
+        playlist_response = youtube.playlistItems().list(
+            part = 'snippet',
+            maxResults = 5,
+            playlistId = uploads_playlist_id,
+            pageToken = page_token
+        ).execute()
+        playlist_items += playlist_response['items']
+        page_token = playlist_response.get('nextPageToken')
 
-        hours  = int(hours.group(1)) if hours else 0
-        minutes  = int(minutes.group(1)) if minutes else 0
-        seconds  = int(seconds.group(1)) if seconds else 0
+        if not page_token:
+            break
+    
+    videos_data = []
+    for item in playlist_items[:50]:
+        video_id = item['snippet']['resourceId']['videoId']
+        title = item['snippet']['title']
+        published_at = item['snippet']['publishedAt'][0:10]
+        tags, view_count, thumbnail, duration = get_video_details(video_id, api_key)
 
-        video_seconds = timedelta(
-            hours = hours,
-            minutes = minutes,
-            seconds = seconds
-        ).total_seconds()
-
-        total_seconds += video_seconds
-
-    nextPageToken = pl_response.get('nextPageToken')
-
-    if not nextPageToken:
-        break
-
-print(total_seconds)
-
-total_seconds = int(total_seconds)
+        videos_data.append(
+            {'title':title,
+             'published' :published_at,
+             'tags':tags,
+             'views': view_count,
+             'thumbnail':thumbnail,
+             'duration':duration
+            }
+        )
+    return videos_data
 
 
-minutes, seconds = divmod(total_seconds, 60)
-hours, minutes = divmod(minutes, 60)
+def get_video_details(video_id, api_key):
+    youtube = build('youtube', 'v3', developerKey=api_key)
 
-print(f'{hours}:{minutes}:{seconds}')
+    video_reponse = youtube.videos().list(
+        part='snippet,contentDetails,statistics',
+        id = video_id
+    ).execute()
+
+    video = video_reponse['items'][0]
+    tags = video['snippet'].get('tags', [])
+    view_count = video['statistics']['viewCount']
+    thumbnail  = video['snippet']['thumbnails']['high']['url']
+    duration = video['contentDetails']['duration']
+
+    return tags, view_count, thumbnail, duration
+
+data = (get_channel_details(channel_id= 'UCBJycsmduvYEL83R_U4JriQ'))
+
+# Saving the data to a json file
+with open('data.json', 'w')as f:
+    json.dump(data, f, indent=2)
+
+# Using panda to organise the data from a json file
+
+data_frame = pd.read_json('data.json')
+
+visualizer.display()
